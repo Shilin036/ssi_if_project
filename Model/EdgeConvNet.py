@@ -2,6 +2,14 @@ import torch.nn as nn
 from torch_geometric.nn import EdgeConv, global_mean_pool
 import torch.nn.functional as F
 
+class EdgeOutputer(torch.nn.Module):
+  def __init__(self, the_op=torch.sub):
+    super().__init__()
+    self.the_op = the_op
+  def forward(self, x, edge_index):
+    return self.the_op(x[edge_index[0]], x[edge_index[1]])
+
+
 class InnerNet(torch.nn.Module):
   def __init__(self, n_node_features, layer_width):
     super().__init__()
@@ -13,7 +21,7 @@ class InnerNet(torch.nn.Module):
       layers.append(nn.Linear(insize, layer_width))
       layers.append(nn.BatchNorm1d(num_features=layer_width))
       layers.append(nn.ReLU())
-    
+
     self.model = nn.Sequential(*layers)
 
 
@@ -22,7 +30,7 @@ class InnerNet(torch.nn.Module):
 
 
 class EdgeConvNet(torch.nn.Module):
-  def __init__(self, n_node_features, aggr='mean'):
+  def __init__(self, n_node_features=16, aggr='mean'):
     super().__init__()
 
     assert_msg = 'aggr should be one of mean, max, or min'
@@ -39,13 +47,14 @@ class EdgeConvNet(torch.nn.Module):
 
     ]
     self.end_layers = nn.Sequential(*layers)
+    self.edge_outputer = EdgeOutputer()
 
   def forward(self, data):
     x = torch.cat((self.edge_conv(data.x, data.edge_index), data.x),
                   dim=1)
-  
-    self.relu1(x)
 
+    x = self.relu1(x)
+    x = self.edge_outputer(x, data.edge_index)
     return F.sigmoid(self.end_layers(x))
 
 
